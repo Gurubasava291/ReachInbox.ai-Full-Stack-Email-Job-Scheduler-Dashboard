@@ -1,0 +1,94 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum EmailStatus {
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+  RATE_LIMITED_RESCHEDULED
+  CANCELLED
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String            @unique
+  name             String
+  avatarUrl        String?
+  googleId         String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  slackConnections SlackConnection[]
+  campaigns        EmailCampaign[]
+}
+
+model SlackConnection {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  webhookUrl     String?
+  botAccessToken String?
+  teamId         String?
+  teamName       String?
+  channel        String?
+  isConnected    Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model EmailCampaign {
+  id              String     @id @default(uuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  senderEmail     String
+  subject         String
+  body            String
+  totalRecipients Int
+  status          String     @default("ACTIVE")
+  delaySeconds    Int        @default(2)
+  hourlyLimit     Int        @default(10)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  emailJobs       EmailJob[]
+}
+
+model EmailJob {
+  id                 String         @id @default(uuid())
+  campaignId         String?
+  campaign           EmailCampaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  senderEmail        String
+  recipientEmail     String
+  subject            String
+  body               String
+  scheduledAt        DateTime
+  sentAt             DateTime?
+  status             EmailStatus    @default(SCHEDULED)
+  bullJobId          String?        @unique
+  attempts           Int            @default(0)
+  errorReason        String?
+  etherealPreviewUrl String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([senderEmail])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model RateLimitRecord {
+  id          String   @id @default(uuid())
+  senderEmail String
+  hourKey     String
+  count       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([senderEmail, hourKey])
+}
